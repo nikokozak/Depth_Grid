@@ -1,4 +1,6 @@
 import * as THREE from 'three';
+import { OrbitControls } from 'three/addons/controls/OrbitControls.js';
+const { produce } = immer; // Immer for immutability
 
 const BARS = 4;
 const TIME_SIGNATURE = 4;
@@ -8,7 +10,10 @@ let GLOBAL_COUNT = 0;
 // Aesthetics
 const GRID_DOT_COLOR = 'black';
 const GRID_DOT_RADIUS = 5;
-const GRID_ROW_SPACING = 20;
+const GRID_TRIGGER_SPACING = 20;
+const GRID_DRAW_X_ORIGIN = 50;
+const GRID_DRAW_Y_ORIGIN = 50;
+const GRID_DRAW_Z_ORIGIN = 50;
 
 // Author: cboshuizen on Reddit
 const SAMPLES = [
@@ -18,25 +23,129 @@ const SAMPLES = [
   'TR-505_Tape_Snare.wav'
 ]
 
+const STATE = {
+  transport: {
+    isPlaying: false,
+    bpm: BPM,
+    bars: BARS,
+    timeSignature: TIME_SIGNATURE,
+  },
+  arrangements: [{
+    isSelected: true,
+    isActive: true,
+    id: 0,
+    tracks: makeTracks(SAMPLES)
+  }],
+  samples: SAMPLES
+}
+
+function makeTracks(samples) {
+  return samples.reduce((tracks, sample) => {
+    const [name, _ext] = sample.split('.');
+    const track = {};
+    track.name = name;
+    track.triggers = makeTriggers();
+    track.player = new Tone.Player(`samples/${sample}`).toDestination();
+    tracks.push(track);
+    return tracks;
+  }, []);
+}
+
+function makeTriggers() {
+  return new Array(BARS * TIME_SIGNATURE).fill({
+    isSelected: false,
+    isActive: false,
+    id: 0,
+    pitch: 0,
+    pan: 0,
+    volume: 0
+  });
+}
+
 const scene = new THREE.Scene();
 const camera = new THREE.PerspectiveCamera(75, window.innerWidth / window.innerHeight, 0.1, 1000);
+camera.position.set(100, 100, 200);
+camera.lookAt(
+  GRID_DRAW_X_ORIGIN + (SAMPLES.length * GRID_TRIGGER_SPACING) / 2,
+  GRID_DRAW_Y_ORIGIN,
+  GRID_DRAW_Z_ORIGIN + (BARS * TIME_SIGNATURE * GRID_TRIGGER_SPACING) / 2
+)
 const renderer = new THREE.WebGLRenderer();
 renderer.setSize(window.innerWidth, window.innerHeight);
 document.body.appendChild(renderer.domElement);
 
+const controls = new OrbitControls(camera, renderer.domElement);
 const geometry = new THREE.BoxGeometry(1, 1, 1);
 const material = new THREE.MeshBasicMaterial({ color: 0x00ff00 });
 const cube = new THREE.Mesh(geometry, material);
 scene.add(cube);
 
 camera.position.z = 5;
+controls.update();
+controls.enableDamping = true;
 
 function animate() {
   cube.rotation.x += 0.01;
   cube.rotation.y += 0.01;
+  controls.update();
   renderer.render(scene, camera);
 }
 renderer.setAnimationLoop(animate);
+
+function drawState(state) {
+  // Draw the transport
+  // drawTransport(state.transport);
+  // Draw the arrangements
+  console.log(state);
+  drawArrangements(state.arrangements);
+}
+
+function drawArrangements(arrangements) {
+  arrangements.forEach(arrangement => {
+    if (arrangement.isSelected) {
+      drawTracks(arrangement.tracks);
+    }
+  });
+}
+
+function drawTracks(tracks) {
+  tracks.forEach((track, trackIdx) => {
+    drawTrack(track, trackIdx);
+  });
+}
+
+function drawTrack(track, trackIdx) {
+  drawTrackLine(track.triggers, trackIdx);
+  // Draw the triggers
+  drawTriggers(track.triggers, trackIdx);
+}
+
+function drawTrackLine(triggers, trackIdx) {
+  const points = [];
+  for (let i = 0; i < triggers.length; i++) {
+    points.push(new THREE.Vector3(
+      GRID_DRAW_X_ORIGIN + trackIdx * GRID_TRIGGER_SPACING,
+      GRID_DRAW_Y_ORIGIN,
+      GRID_DRAW_Z_ORIGIN + i * GRID_TRIGGER_SPACING));
+  }
+  const material = new THREE.LineBasicMaterial({ color: 0x0000ff });
+  const geometry = new THREE.BufferGeometry().setFromPoints(points);
+  const line = new THREE.Line(geometry, material);
+  scene.add(line);
+}
+
+function drawTriggers(triggers, trackIdx) {
+  const material = new THREE.MeshBasicMaterial({ color: 0xff0000 });
+  const geometry = new THREE.SphereGeometry(5, 32, 32);
+  for (let i = 0; i < triggers.length; i++) {
+    const sphere = new THREE.Mesh(geometry, material);
+    sphere.position.set(GRID_DRAW_X_ORIGIN + trackIdx * GRID_TRIGGER_SPACING, GRID_DRAW_Y_ORIGIN, GRID_DRAW_Z_ORIGIN + i * GRID_TRIGGER_SPACING);
+    scene.add(sphere);
+  }
+}
+
+drawState(STATE);
+
 
 // ************************************************************************************************************************************************************************************
 //                                                       METAGRID
