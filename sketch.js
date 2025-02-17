@@ -1,3 +1,5 @@
+import * as THREE from 'three';
+
 const BARS = 4;
 const TIME_SIGNATURE = 4;
 const BPM = 120;
@@ -15,6 +17,26 @@ const SAMPLES = [
   'TR-505_Tape_Kick.wav',
   'TR-505_Tape_Snare.wav'
 ]
+
+const scene = new THREE.Scene();
+const camera = new THREE.PerspectiveCamera(75, window.innerWidth / window.innerHeight, 0.1, 1000);
+const renderer = new THREE.WebGLRenderer();
+renderer.setSize(window.innerWidth, window.innerHeight);
+document.body.appendChild(renderer.domElement);
+
+const geometry = new THREE.BoxGeometry(1, 1, 1);
+const material = new THREE.MeshBasicMaterial({ color: 0x00ff00 });
+const cube = new THREE.Mesh(geometry, material);
+scene.add(cube);
+
+camera.position.z = 5;
+
+function animate() {
+  cube.rotation.x += 0.01;
+  cube.rotation.y += 0.01;
+  renderer.render(scene, camera);
+}
+renderer.setAnimationLoop(animate);
 
 // ************************************************************************************************************************************************************************************
 //                                                       METAGRID
@@ -64,7 +86,7 @@ function getMetaGridPointCoords(x, y, z, metagrid) {
 // Pass in 'xy' or 'xz' or 'yz' for the axis, and the origin point.
 function getMetaGridPlane(axis, originPoint, metagrid) {
   const plane = [];
-  const axis = axis === 'xy' ? 2 : axis === 'xz' ? 1 : 0;
+  axis = axis === 'xy' ? 2 : axis === 'xz' ? 1 : 0;
   for (let i = 0; i < metagrid.width; i++) {
     for (let j = 0; j < metagrid.height; j++) {
       const coords = getMetaGridPointCoords(i, j, metagrid);
@@ -80,7 +102,7 @@ function getMetaGridPlane(axis, originPoint, metagrid) {
 // Pass in 'x' or 'y' or 'z' for the axis, and the origin point.
 function getMetaGridLine(axis, originPoint, metagrid) {
   const line = [];
-  const axis = axis === 'x' ? 0 : axis === 'y' ? 1 : 2;
+  axis = axis === 'x' ? 0 : axis === 'y' ? 1 : 2;
   for (let i = 0; i < metagrid.width; i++) {
     for (let j = 0; j < metagrid.height; j++) {
       const coords = getMetaGridPointCoords(i, j, metagrid);
@@ -168,7 +190,7 @@ const arrangementLoop = new Tone.Loop(time => {
 arrangementLoop.start(0);
 
 // Toggle trigger on/off
-function mousePressed() {
+async function mousePressed() {
   const sampleIndex = Math.floor((mouseY - 50) / GRID_ROW_SPACING);
   const triggerIndex = Math.floor((mouseX - 50) / GRID_ROW_SPACING);
   console.log(sampleIndex, triggerIndex);
