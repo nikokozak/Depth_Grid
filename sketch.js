@@ -16,6 +16,126 @@ const SAMPLES = [
   'TR-505_Tape_Snare.wav'
 ]
 
+// ************************************************************************************************************************************************************************************
+//                                                       METAGRID
+// ************************************************************************************************************************************************************************************
+
+// Create a data structure to represent the meta-grid, which will dictate where we can draw UI elements, and consequently where we can trigger samples.
+// Think of this as a sub-sampling of the draw-space of the sketch; Given that we're only really interested in drawing elements at very specific and regular
+// points in space, we don't need to worry about the entire canvas. The meta-grid therefore depends on the resolution of the sketch, and our preferred spacing,
+// and extends in the z-axis so as to create a cube.
+function createMetaGrid(sketchWidth, sketchHeight, spacing) {
+  // There is also a "padding" equal to the spacing all around the grid.
+  const padding = spacing;
+  const gridWidth = sketchWidth - 2 * padding;
+  const gridHeight = sketchHeight - 2 * padding;
+  const gridDepth = sketchHeight - 2 * padding;
+  const grid =
+  {
+    points: [], // The x-y coordinates of each point in the grid.
+    width: Math.floor((gridWidth - padding) / spacing), // The width of the grid in terms of the number of points.
+    height: Math.floor((gridHeight - padding) / spacing), // The height of the grid in terms of the number of points. 
+    depth: Math.floor((gridDepth - padding) / spacing) // The depth of the grid in terms of the number of points.
+  };
+
+  // Fetch a point in a 1-dimensional array by its x, y, and z coordinates.
+  function getPoint(x, y, z) {
+    return grid.points[x + y * grid.width + z * grid.width * grid.height];
+  }
+
+  // Populate the metagrid
+  for (let x = padding; x < gridWidth; x += spacing) {
+    for (let y = padding; y < gridHeight; y += spacing) {
+      for (let z = padding; z < gridDepth; z += spacing) {
+        grid.points.push([x, y, z]);
+      }
+    }
+  }
+  return grid;
+}
+
+// Returns the x-y coordinates of a given x-y point in the grid.
+function getMetaGridPointCoords(x, y, z, metagrid) {
+  // return the coordinate using width, height, and depth in the metagrid object
+  return metagrid.points[x + metagrid.width * (y + metagrid.depth * z)]
+}
+
+// Returns a plane of points in the metagrid that lie on a given axis and at a given origin point.
+// Pass in 'xy' or 'xz' or 'yz' for the axis, and the origin point.
+function getMetaGridPlane(axis, originPoint, metagrid) {
+  const plane = [];
+  const axis = axis === 'xy' ? 2 : axis === 'xz' ? 1 : 0;
+  for (let i = 0; i < metagrid.width; i++) {
+    for (let j = 0; j < metagrid.height; j++) {
+      const coords = getMetaGridPointCoords(i, j, metagrid);
+      if (coords[axis] === originPoint[axis]) {
+        plane.push(coords);
+      }
+    }
+  }
+  return plane;
+}
+
+// Returns a set of points representing a line in the metagrid space.
+// Pass in 'x' or 'y' or 'z' for the axis, and the origin point.
+function getMetaGridLine(axis, originPoint, metagrid) {
+  const line = [];
+  const axis = axis === 'x' ? 0 : axis === 'y' ? 1 : 2;
+  for (let i = 0; i < metagrid.width; i++) {
+    for (let j = 0; j < metagrid.height; j++) {
+      const coords = getMetaGridPointCoords(i, j, metagrid);
+      switch (axis) {
+        case 'x':
+          if (coords[1] == originPoint[1] && coords[2] == originPoint[2]) { line.push(coords); }
+          break;
+        case 'y':
+          if (coords[0] == originPoint[0] && coords[2] == originPoint[2]) { line.push(coords); }
+          break;
+        case 'z':
+          if (coords[0] == originPoint[0] && coords[1] == originPoint[1]) { line.push(coords); }
+          break;
+      }
+    }
+  }
+  return line;
+}
+
+// Draw the trigger grid using the metagrid as the drawspace
+function drawTriggerGrid(triggers, posX, posY, posZ, metagrid) {
+  // Draw trigger row for each sample
+  for (let i = 0; i < Object.keys(triggers).length; i++) {
+    drawTriggerRow(triggers[Object.keys(triggers)[i]], posX, posY, posZ, metagrid);
+  }
+}
+
+// Draw trigger row for each sample
+function drawTriggerRow(triggerRow, posX, posY, posZ, metagrid) {
+  if (BARS * TIME_SIGNATURE !== triggerRow.length) { throw new Error('Trigger length mismatch'); }
+
+  for (let i = 0; i < triggerRow.length; i++) {
+    drawTriggerDot(posX + i, posY, posZ, metagrid, triggerRow[i]);
+  }
+}
+
+// Draw a trigger grid dot
+function drawTriggerDot(posX, posY, posZ, triggerVal, metagrid) {
+  const metaGridPoint = getMetaGridPointCoords(posX, posY, posZ, metagrid);
+  if (triggerVal == 1) { // If trigger is on
+    // Draw a black circle
+    fill(GRID_DOT_COLOR);
+    circle(metaGridPoint[0], metaGridPoint[1], GRID_DOT_RADIUS);
+  } else { // If trigger is off
+    // Draw a white circle with a black outline
+    stroke(GRID_DOT_COLOR);
+    fill('white');
+    circle(metaGridPoint[0], metaGridPoint[1], GRID_DOT_RADIUS);
+  }
+}
+
+// ************************************************************************************************************************************************************************************
+//                                                      TONE.JS 
+// ************************************************************************************************************************************************************************************
+
 // Tone Players
 const players = new Tone.Players(SAMPLES.reduce((players, sample) => {
   const [name, _ext] = sample.split('.');
@@ -46,36 +166,6 @@ const arrangementLoop = new Tone.Loop(time => {
   GLOBAL_COUNT++;
 }, '4n');
 arrangementLoop.start(0);
-
-function drawTriggerGrid(triggers, posX, posY) {
-  // Draw trigger row for each sample
-  for (let i = 0; i < Object.keys(triggers).length; i++) {
-    drawTriggerRow(triggers[Object.keys(triggers)[i]], posX, posY + i * GRID_ROW_SPACING);
-  }
-}
-
-// Draw trigger row for each sample
-function drawTriggerRow(triggerRow, posX, posY) {
-  if (BARS * TIME_SIGNATURE !== triggerRow.length) { throw new Error('Trigger length mismatch'); }
-
-  for (let i = 0; i < triggerRow.length; i++) {
-    drawGridDot(posX + i * GRID_ROW_SPACING, posY, triggerRow[i]);
-  }
-}
-
-// Draw a trigger grid dot
-function drawGridDot(posX, posY, triggerVal) {
-  if (triggerVal == 1) { // If trigger is on
-    // Draw a black circle
-    fill(GRID_DOT_COLOR);
-    circle(posX, posY, GRID_DOT_RADIUS);
-  } else { // If trigger is off
-    // Draw a white circle with a black outline
-    stroke(GRID_DOT_COLOR);
-    fill('white');
-    circle(posX, posY, GRID_DOT_RADIUS);
-  }
-}
 
 // Toggle trigger on/off
 function mousePressed() {
